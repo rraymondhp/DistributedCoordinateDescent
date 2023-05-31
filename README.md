@@ -24,7 +24,7 @@ backend = service.backend('ibm_washington') # the name of devices
 ## Modification to run experiments on Side Chain Rotamer Classification
 
 The main python notebook files are (they are basically the same)
-> main_seattle_molecules.ipynb  #This is to run on simulator_mps
+> main_seattle_molecules.ipynb  #This is to run on simulator_mps <br>
 > main_seattle_molecules-Copy1.ipynb #This is to run on ibm_seattle 
 
 You may want to look at the `data_loader()` defined at `training_molecules.py` to get an understanding of providing instances for training and testing. Basically, you have to place the data files under the directory `data/IBM`.
