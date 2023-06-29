@@ -4,4 +4,5 @@ __pycache__/
 .flake8
 *.py[cod]
 .pre-commit-config.yaml
+img/
 ```

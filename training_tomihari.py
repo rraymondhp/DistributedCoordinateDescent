@@ -19,7 +19,7 @@ def data_loader(num_train, num_test, isFashion=False, CSV=None, preprocessing=No
         elif CSV is not None:
             print("Using CSV")
             data = pd.read_csv(CSV)
-            train, test = train_test_split(data, test_size=0.2)
+            train, test = train_test_split(data, test_size=0.2, random_state=0)
             if preprocessing == "Titanic":
                 print("Using Titanic preprocessing")
                 train_label, train_feat, test_label, test_feat = preprocessing_titanic(
@@ -89,10 +89,13 @@ def preprocessing_titanic(data, num_train, num_test):
     data["Sex"] = le.fit_transform(data["Sex"])
     le = LabelEncoder()
     data["Embarked"] = le.fit_transform(data["Embarked"])
-    # print("info:", data.info())
+    print("info:", data.info())
 
     # Drop the unnecessary columns
     data = data.drop(["PassengerId", "Name", "Ticket", "Cabin"], axis=1)
+
+    # Relabeling
+    data["Survived"] = data["Survived"].replace(0, -1)
 
     # Train Test Split
     train, test = train_test_split(data, test_size=0.2)
@@ -105,6 +108,12 @@ def preprocessing_titanic(data, num_train, num_test):
     sc = StandardScaler()
     train_feat = sc.fit_transform(train_feat)
     test_feat = sc.transform(test_feat)
+
+    # Normalization
+    train_feat = np.kron(train_feat, train_feat)
+    train_feat = np.kron(test_feat, test_feat)
+    train_feat /= np.linalg.norm(train_feat, ord=2, axis=1, keepdims=True)
+    test_feat /= np.linalg.norm(test_feat, ord=2, axis=1, keepdims=True)
 
     return train_label, train_feat, test_label, test_feat
 
@@ -122,16 +131,28 @@ def parallel_train(
     isFashion=False,
     CSV=None,
     preprocessing=None,
+    update="inorder",
+    trainrate=1.0,
 ):
     test_label, train_label, test_feat, train_feat = data_loader(
         num_train, num_test, isFashion=isFashion, CSV=CSV, preprocessing=preprocessing
     )
     model = FraxClassify(
-        n_qubits, layer_size, world_size, num_train, num_test, backend, params
+        n_qubits,
+        layer_size,
+        world_size,
+        num_train,
+        num_test,
+        backend,
+        params,
+        update=update,
+        trainrate=trainrate,
     )
     with Session(service=service, backend=backend):
         for i in range(update_iter):
             st = time.time()
-            model.fit_and_eval(train_feat, train_label, test_feat, test_label)
-            print(time.time() - st)
+            model.fit_and_eval(
+                train_feat, train_label, test_feat, test_label, isEval=True
+            )
+            print("Implementation time: ", time.time() - st)
             print("_______________NEW________________ Iteration: ", i)
