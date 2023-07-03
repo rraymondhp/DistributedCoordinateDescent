@@ -40,14 +40,14 @@ class FraxClassify:
         self.update = update
         self.trainrate = trainrate
 
-    def fit_and_eval(self, X, y, X2, y2, isEval=False):
+    def fit_and_eval(self, X, y, X2, y2, isVal=True, isEval=False):
         sampler = Sampler()
         order = list(
             itertools.product(np.arange(self.layer_size), np.arange(self.n_qubits))
         )
         if self.update == "random":
             np.random.shuffle(order)
-        print("order_layer: ", order)  # ここで順番を確認
+        print("order_layer: ", order)
         for i in range(self.layer_size * self.n_qubits):
             a, b = order[i]
             R = np.zeros((3, 3))
@@ -126,9 +126,10 @@ class FraxClassify:
                     qcs, backend=self.backend, optimization_level=1
                 )
                 # print("AF TRANSPILE")
+                # print("saving circuit...", len(transpiled_circuits))
                 # for idx, _c in enumerate(transpiled_circuits):
-                #     _c.draw(filename="circuit_"+str(idx)+".png", output="mpl")
-                #     _c.draw(filename="circuit_"+str(idx)+".tex", output="latex_source")
+                #     _c.draw(filename="img/circuit_"+str(idx)+"_0630"+".png", output="mpl")
+                #     # _c.draw(filename="img/circuit_"+str(idx)+".tex", output="latex_source")
                 # sys.exit(0)
                 result = sampler.run(circuits=transpiled_circuits).result().quasi_dists
                 r6s = np.zeros((6, self.world_size))
@@ -179,8 +180,11 @@ class FraxClassify:
             eigenvalues, eigenvectors = np.linalg.eigh(R)
             self.params[a, b] = eigenvectors[:, np.argmax(eigenvalues.real)]
             print("Max value of eigenvalues: ", np.max(eigenvalues))
-            acc_and_score = self.eval(X, y)
-            print("ACC_train: ", acc_and_score[0], "\nSCORE_train: ", acc_and_score[1])
+            if isVal:
+                acc_and_score = self.eval(X, y)
+                print(
+                    "ACC_train: ", acc_and_score[0], "\nSCORE_train: ", acc_and_score[1]
+                )
             ##COMMENTED OUT BY RRHP FOR SPEEDING UP TRAINING ON 2023/05/12
             # acc_and_score = self.eval(X2, y2)
             #
@@ -192,10 +196,31 @@ class FraxClassify:
         if isEval:
             acc_and_score = self.eval(X2, y2)
             print("ACC_test: ", acc_and_score[0], "\nSCORE_test: ", acc_and_score[1])
+            print("Number of test data: ", y2.shape[0])
+            print(
+                "true_positives: ",
+                acc_and_score[2],
+                "\nfalse_positives: ",
+                acc_and_score[3],
+                "\ntrue_negatives: ",
+                acc_and_score[4],
+                "\nfalse_negatives: ",
+                acc_and_score[5],
+            )
+            print(
+                "Precision: ", acc_and_score[2] / (acc_and_score[2] + acc_and_score[3])
+            )
+            print("Recall: ", acc_and_score[2] / (acc_and_score[2] + acc_and_score[5]))
+            print(
+                "F1: ",
+                2
+                * acc_and_score[2]
+                / (2 * acc_and_score[2] + acc_and_score[3] + acc_and_score[5]),
+            )
 
     def eval(self, X, y):
         sampler = Sampler()
-        acc_and_score = np.zeros(2)
+        acc_and_score = np.zeros(6)
         for a in range(y.shape[0] // self.world_size):
             qc = QuantumCircuit(self.n_qubits * self.world_size, self.world_size)
             feature_map = []
@@ -236,16 +261,52 @@ class FraxClassify:
                         Zexp[c] -= result[0][b]
                     else:
                         Zexp[c] += result[0][b]
-
-            acc_and_score[0] += np.sum(
+            true = np.where(
+                y[a * self.world_size : (a + 1) * self.world_size : 1] * Zexp > 0,
+                1,
+                0,
+            )
+            false = np.where(
+                y[a * self.world_size : (a + 1) * self.world_size : 1] * Zexp < 0,
+                1,
+                0,
+            )
+            true_positives = np.sum(
                 np.where(
-                    y[a * self.world_size : (a + 1) * self.world_size : 1] * Zexp > 0,
+                    true * y[a * self.world_size : (a + 1) * self.world_size : 1] > 0,
                     1,
                     0,
                 )
             )
+            true_negatives = np.sum(
+                np.where(
+                    true * y[a * self.world_size : (a + 1) * self.world_size : 1] < 0,
+                    1,
+                    0,
+                )
+            )
+            false_positives = np.sum(
+                np.where(
+                    false * y[a * self.world_size : (a + 1) * self.world_size : 1] < 0,
+                    1,
+                    0,
+                )
+            )
+            false_negatives = np.sum(
+                np.where(
+                    false * y[a * self.world_size : (a + 1) * self.world_size : 1] > 0,
+                    1,
+                    0,
+                )
+            )
+            acc_and_score[0] += np.sum(true)
             acc_and_score[1] += (
                 np.sum(y[a * self.world_size : (a + 1) * self.world_size : 1] * Zexp)
                 * 2
             )
+            acc_and_score[2] += true_positives
+            acc_and_score[3] += true_negatives
+            acc_and_score[4] += false_positives
+            acc_and_score[5] += false_negatives
+
         return acc_and_score / y.shape[0]

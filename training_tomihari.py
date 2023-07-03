@@ -8,7 +8,15 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import StandardScaler
 
 
-def data_loader(num_train, num_test, isFashion=False, CSV=None, preprocessing=None):
+def data_loader(
+    num_train,
+    num_test,
+    isFashion=False,
+    CSVpath=None,
+    feat=None,
+    label=None,
+    preprocessing=None,
+):
     try:
         if isFashion:
             print("Using Fashion MNIST")
@@ -16,21 +24,25 @@ def data_loader(num_train, num_test, isFashion=False, CSV=None, preprocessing=No
             train_label = np.load("data/fmnist_train_Label.npy")[0:num_train]
             test_feat = np.load("data/fmnist_test_feat.npy")[0:num_test]
             train_feat = np.load("data/fmnist_train_feat.npy")[0:num_train]
-        elif CSV is not None:
-            print("Using CSV")
-            data = pd.read_csv(CSV)
-            train, test = train_test_split(data, test_size=0.2, random_state=0)
+        elif CSVpath is not None:
+            print("Using CSV: ", CSVpath)
+            try:
+                data = pd.read_csv(CSVpath)
+            except Exception as e:
+                print("Error Cannot read CSV file: ", CSVpath)
+                raise e
             if preprocessing == "Titanic":
                 print("Using Titanic preprocessing")
                 train_label, train_feat, test_label, test_feat = preprocessing_titanic(
                     data, num_train, num_test
                 )
             else:
-                print("No preprocessing !!!")
-                train_label = train["label"].to_numpy()[0:num_train]
-                train_feat = train.drop("label", axis=1).to_numpy()[0:num_train]
-                test_label = test["label"].to_numpy()[0:num_test]
-                test_feat = test.drop("label", axis=1).to_numpy()[0:num_test]
+                train, test = train_test_split(data, test_size=0.2, random_state=0)
+                print("No preprocessing")
+                train_label = train[label].to_numpy()[0:num_train]
+                train_feat = train.drop(label, axis=1).to_numpy()[0:num_train]
+                test_label = test[label].to_numpy()[0:num_test]
+                test_feat = test.drop(label, axis=1).to_numpy()[0:num_test]
         else:
             print("Using MNIST")
             test_label = np.load("data/mnist_test_Label.npy")[0:num_test]
@@ -39,7 +51,7 @@ def data_loader(num_train, num_test, isFashion=False, CSV=None, preprocessing=No
             train_feat = np.load("data/mnist_train_feat.npy")[0:num_train]
         return test_label, train_label, test_feat, train_feat
     except Exception as e:
-        print("Error:", e)
+        print("Error in data_loader:", e)
         raise e
 
 
@@ -89,7 +101,7 @@ def preprocessing_titanic(data, num_train, num_test):
     data["Sex"] = le.fit_transform(data["Sex"])
     le = LabelEncoder()
     data["Embarked"] = le.fit_transform(data["Embarked"])
-    print("info:", data.info())
+    # print("info:", data.info())
 
     # Drop the unnecessary columns
     data = data.drop(["PassengerId", "Name", "Ticket", "Cabin"], axis=1)
@@ -129,13 +141,45 @@ def parallel_train(
     backend,
     params,
     isFashion=False,
-    CSV=None,
+    CSVpath=None,
     preprocessing=None,
     update="inorder",
     trainrate=1.0,
+    isVal=True,
+    isEval=True,
+    label=None,
+    feat=None,
 ):
+    """
+    Parallel training of the model
+    Args:
+        n_qubits: number of qubits
+        layer_size: number of layers
+        world_size: number of workers
+        num_train: number of training data
+        num_test: number of test data
+        update_iter: number of iterations
+        service: service name
+        backend: backend name
+        params: parameters for the model
+        isFashion: whether to use fashion mnist
+        CSVpath: path to the csv file
+        preprocessing: preprocessing function
+        update: update method
+        trainrate: training rate
+        isVal: whether to use validation set
+        isEval: whether to use test set
+        label: label data
+        feat: feature data
+    """
     test_label, train_label, test_feat, train_feat = data_loader(
-        num_train, num_test, isFashion=isFashion, CSV=CSV, preprocessing=preprocessing
+        num_train,
+        num_test,
+        isFashion=isFashion,
+        CSVpath=CSVpath,
+        feat=feat,
+        label=label,
+        preprocessing=preprocessing,
     )
     model = FraxClassify(
         n_qubits,
@@ -152,7 +196,12 @@ def parallel_train(
         for i in range(update_iter):
             st = time.time()
             model.fit_and_eval(
-                train_feat, train_label, test_feat, test_label, isEval=True
+                train_feat,
+                train_label,
+                test_feat,
+                test_label,
+                isVal=isVal,
+                isEval=isEval,
             )
             print("Implementation time: ", time.time() - st)
             print("_______________NEW________________ Iteration: ", i)

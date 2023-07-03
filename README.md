@@ -29,4 +29,23 @@ The main python notebook files are (they are basically the same)
 
 You may want to look at the `data_loader()` defined at `training_molecules.py` to get an understanding of providing instances for training and testing. Basically, you have to place the data files under the directory `data/IBM`.
 
+## Using a CSV file 
+When using a CSV file, execute the script `main_tomihari.py`.
+The following parameters can be adjusted in your quantum computation:
 
+- `update:` Specifies the update mode. Set as `update = "inorder"`.
+- `trainrate`: Specifies the training rate. Set as `trainrate = 1.0`.
+- `preprocessing`: Preprocessing method for the data, if any. Set as `preprocessing=None`.
+- `label`: Label for the data. In this example, it is set as `label="Survived"`.
+- `feat`: Features to be used from the data. In this example, `feat=["Age", "Fare"]`.
+- `CSVpath`: Path to the CSV file with the data. Set as `CSVpath = "data/titanic/train.csv"`.
+
+The quantum computation backend is set with `backend = service.backend("simulator_mps")`.
+
+Parameters can be initialized using random values:
+
+```python
+params = np.random.rand(L, Q, 3)
+params /= np.linalg.norm(params, axis=2, keepdims=True)
+```
+For additional details on configuration and usage, refer to the parallel_train() function in the `training_tomihari.py` file.
