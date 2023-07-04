@@ -80,9 +80,10 @@ class FraxClassify:
                 )
             )
         order = order[: int(self.update_rate * len(order))]
-        print("order_layer: ", order)
+        print("The order of update: ", order)
         acc = []
-        for i in range(self.layer_size * self.n_qubits):
+        for i in range(len(order)):
+            break
             a, b = order[i]
             R = np.zeros((3, 3))
             train_index = rand_nodup(0, y.shape[0], self.train_size)
@@ -208,11 +209,7 @@ class FraxClassify:
             R[2, 1] = R[1, 2]
             # Decrease the difference in behavior
             # R = np.where(R*R<1e-8, 0, R)
-            # R /= self.train_size
-            print("R\n", R)
             R /= self.train_size
-            print("size\n", self.train_size)
-            print("R\n", R)
             eigenvalues, eigenvectors = np.linalg.eigh(R)
             self.params[a, b] = eigenvectors[:, np.argmax(eigenvalues.real)]
             print("Max value of eigenvalues: ", np.max(eigenvalues))
@@ -233,7 +230,10 @@ class FraxClassify:
         if isEval:
             acc_and_score = self.eval(X2, y2)
             print("ACC_test: ", acc_and_score[0], "\nSCORE_test: ", acc_and_score[1])
-            print("Number of test data: ", y2.shape[0])
+            print(
+                "Number of test data: ",
+                (y2.shape[0] // self.world_size) * self.world_size,
+            )
             print(
                 "true_positives: ",
                 acc_and_score[2],
@@ -244,7 +244,6 @@ class FraxClassify:
                 "\nfalse_negatives: ",
                 acc_and_score[5],
             )
-            print("y2: ", y2)
             try:
                 print(
                     "Precision: ",
@@ -360,6 +359,7 @@ class FraxClassify:
             acc_and_score[3] += true_negatives
             acc_and_score[4] += false_positives
             acc_and_score[5] += false_negatives
-        acc_and_score[0] /= y.shape[0]
-        acc_and_score[1] /= y.shape[0]
+        num_data = (y.shape[0] // self.world_size) * self.world_size
+        acc_and_score[0] /= num_data
+        acc_and_score[1] /= num_data
         return acc_and_score
