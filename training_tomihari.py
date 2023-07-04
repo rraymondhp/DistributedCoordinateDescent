@@ -6,6 +6,8 @@ from qiskit_ibm_runtime import Session
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import StandardScaler
+from datetime import datetime
+from matplotlib import pyplot as plt
 
 
 def data_loader(
@@ -144,7 +146,8 @@ def parallel_train(
     CSVpath=None,
     preprocessing=None,
     update="inorder",
-    trainrate=1.0,
+    train_rate=1.0,
+    update_rate=1.0,
     isVal=True,
     isEval=True,
     label=None,
@@ -166,7 +169,8 @@ def parallel_train(
         CSVpath: path to the csv file
         preprocessing: preprocessing function
         update: update method
-        trainrate: training rate
+        train_rate: training rate
+        update_rate: update rate
         isVal: whether to use validation set
         isEval: whether to use test set
         label: label data
@@ -190,18 +194,49 @@ def parallel_train(
         backend,
         params,
         update=update,
-        trainrate=trainrate,
+        train_rate=train_rate,
+        update_rate=update_rate,
     )
+    print("Model initialized")
+    acc = []
     with Session(service=service, backend=backend):
         for i in range(update_iter):
             st = time.time()
-            model.fit_and_eval(
-                train_feat,
-                train_label,
-                test_feat,
-                test_label,
-                isVal=isVal,
-                isEval=isEval,
+            acc.extend(
+                model.fit_and_eval(
+                    train_feat,
+                    train_label,
+                    test_feat,
+                    test_label,
+                    isVal=isVal,
+                    isEval=isEval,
+                )
             )
             print("Implementation time: ", time.time() - st)
             print("_______________NEW________________ Iteration: ", i)
+    if isVal:
+        filename = (
+            "experiment/acc_"
+            + str(n_qubits)
+            + "_"
+            + str(layer_size)
+            + "_"
+            + str(update_iter)
+            + "_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S")
+            + ".png"
+        )
+        plt.title("Accuracy against iteration")
+        plt.xlabel("Iteration")
+        plt.ylabel("Accuracy")
+        plt.plot(range(len(acc)), acc)
+        plt.vlines(
+            range(0, update_iter * n_qubits * layer_size, n_qubits * layer_size),
+            min(acc) - 0.05,
+            max(acc) + 0.05,
+            "red",
+            linestyles="dashed",
+            label="Layer update",
+        )
+        plt.legend()
+        plt.savefig(filename)

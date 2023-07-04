@@ -3,8 +3,9 @@ import numpy as np
 from qiskit.circuit import QuantumCircuit, ClassicalRegister
 import random
 
-# from qiskit.primitives import Sampler
-from qiskit_ibm_runtime import Sampler  ##THIS DOES NOT WORK ANYMORE!!!!
+from qiskit.primitives import Sampler
+
+# from qiskit_ibm_runtime import Sampler  ##THIS DOES NOT WORK ANYMORE!!!!
 from qiskit.compiler import transpile
 import sys
 import itertools
@@ -28,26 +29,59 @@ class FraxClassify:
         backend,
         params,
         update="inorder",
-        trainrate=1.0,
+        train_rate=1.0,
+        update_rate=1.0,
     ):
         self.n_qubits = n_qubits
         self.layer_size = layer_size
         self.world_size = world_size
         self.params = params
-        self.train_size = int(train_size * trainrate)
+        self.train_size = int(train_size * train_rate)
         self.test_size = test_size
         self.backend = backend
         self.update = update
-        self.trainrate = trainrate
+        self.update_rate = update_rate
 
     def fit_and_eval(self, X, y, X2, y2, isVal=True, isEval=False):
         sampler = Sampler()
-        order = list(
-            itertools.product(np.arange(self.layer_size), np.arange(self.n_qubits))
-        )
-        if self.update == "random":
-            np.random.shuffle(order)
+        if self.update == "inorder":
+            order = list(
+                itertools.product(np.arange(self.layer_size), np.arange(self.n_qubits))
+            )
+        elif self.update == "random_all":
+            order = np.random.permutation(
+                list(
+                    itertools.product(
+                        np.arange(self.layer_size), np.arange(self.n_qubits)
+                    )
+                )
+            )
+        elif self.update == "random":
+            order = np.random.permutation(
+                list(
+                    itertools.product(
+                        np.random.randint(0, self.layer_size, self.layer_size),
+                        np.random.randint(0, self.n_qubits, self.n_qubits),
+                    )
+                )
+            )
+        elif self.update == "random_per_layer":
+            order = list(
+                itertools.chain.from_iterable(
+                    [
+                        list(
+                            zip(
+                                np.random.randint(0, self.layer_size, self.n_qubits),
+                                np.arange(self.n_qubits),
+                            )
+                        )
+                        for _ in range(self.layer_size)
+                    ]
+                )
+            )
+        order = order[: int(self.update_rate * len(order))]
         print("order_layer: ", order)
+        acc = []
         for i in range(self.layer_size * self.n_qubits):
             a, b = order[i]
             R = np.zeros((3, 3))
@@ -131,7 +165,9 @@ class FraxClassify:
                 #     _c.draw(filename="img/circuit_"+str(idx)+"_0630"+".png", output="mpl")
                 #     # _c.draw(filename="img/circuit_"+str(idx)+".tex", output="latex_source")
                 # sys.exit(0)
+                # print("running Sampler...")
                 result = sampler.run(circuits=transpiled_circuits).result().quasi_dists
+                # print("done")
                 r6s = np.zeros((6, self.world_size))
                 for d in range(6):
                     for e in result[d]:
@@ -185,6 +221,7 @@ class FraxClassify:
                 print(
                     "ACC_train: ", acc_and_score[0], "\nSCORE_train: ", acc_and_score[1]
                 )
+                acc.append(acc_and_score[0])
             ##COMMENTED OUT BY RRHP FOR SPEEDING UP TRAINING ON 2023/05/12
             # acc_and_score = self.eval(X2, y2)
             #
@@ -200,23 +237,40 @@ class FraxClassify:
             print(
                 "true_positives: ",
                 acc_and_score[2],
-                "\nfalse_positives: ",
-                acc_and_score[3],
                 "\ntrue_negatives: ",
+                acc_and_score[3],
+                "\nfalse_positives: ",
                 acc_and_score[4],
                 "\nfalse_negatives: ",
                 acc_and_score[5],
             )
-            print(
-                "Precision: ", acc_and_score[2] / (acc_and_score[2] + acc_and_score[3])
-            )
-            print("Recall: ", acc_and_score[2] / (acc_and_score[2] + acc_and_score[5]))
-            print(
-                "F1: ",
-                2
-                * acc_and_score[2]
-                / (2 * acc_and_score[2] + acc_and_score[3] + acc_and_score[5]),
-            )
+            print("y2: ", y2)
+            try:
+                print(
+                    "Precision: ",
+                    acc_and_score[2] / (acc_and_score[2] + acc_and_score[4]),
+                )
+            except e:
+                print("Error: ", e)
+                print("Precision: nan")
+            try:
+                print(
+                    "Recall: ", acc_and_score[2] / (acc_and_score[2] + acc_and_score[5])
+                )
+            except e:
+                print("Error: ", e)
+                print("Recall: nan")
+            try:
+                print(
+                    "F1: ",
+                    2
+                    * acc_and_score[2]
+                    / (2 * acc_and_score[2] + acc_and_score[4] + acc_and_score[5]),
+                )
+            except e:
+                print("Error: ", e)
+                print("F1: nan")
+        return acc
 
     def eval(self, X, y):
         sampler = Sampler()
@@ -241,12 +295,10 @@ class FraxClassify:
                         qubits=range(self.n_qubits * c, self.n_qubits * (c + 1), 1),
                         inplace=True,
                     )
-
             qc.measure(
                 range(0, self.n_qubits * self.world_size, self.n_qubits),
                 range(self.world_size),
             )
-
             result = (
                 sampler.run(
                     circuits=[qc],
@@ -308,5 +360,6 @@ class FraxClassify:
             acc_and_score[3] += true_negatives
             acc_and_score[4] += false_positives
             acc_and_score[5] += false_negatives
-
-        return acc_and_score / y.shape[0]
+        acc_and_score[0] /= y.shape[0]
+        acc_and_score[1] /= y.shape[0]
+        return acc_and_score

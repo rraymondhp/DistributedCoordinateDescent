@@ -12,37 +12,48 @@ np.random.seed(0)
 #     instance='ibm-q-utokyo/internal/hirashi-jst',
 # )
 service = QiskitRuntimeService()
-service = QiskitRuntimeService(instance="ibm-q-utokyo/internal/qc-training22")
+# service = QiskitRuntimeService(instance="ibm-q-utokyo/internal/qc-training22")
 
 ### Configuration ###
-Q = 2  # number of qubits
-L = 2  # number of fraxis layer
-W = 2  # number of quantum node
-N = 20  # number of training data size
-M = 10  # number of testing data size
-U = 1  # number of update
+Q = 6  # number of qubits
+L = 3  # number of fraxis layer
+W = 3  # number of quantum node
+N = 100  # number of training data size
+M = 100  # number of testing data size
+U = 10  # number of update
 backend = service.backend("simulator_mps")
-# params = np.zeros((L, Q, 3)) + np.array([0, 0, 1])
-params = np.random.rand(L, Q, 3)
+params = np.zeros((L, Q, 3)) + np.array([0, 0, 1])
+# params = np.random.rand(L, Q, 3)
 params /= np.linalg.norm(params, axis=2, keepdims=True)
-update = "inorder"
+# update = "inorder"
+# update = "random_all"
 # update = "random"
-trainrate = 1.0
-# trainrate = 0.5
-preprocessing = "Titanic"
-# preprocessing=None
-label = "Survived"
-# label=None
-feat = ["Age", "Embarked"]
-# feat=None
-CSVpath = "data/titanic/train.csv"
-# CSVpath = None
+update = "random_per_layer"
+# train_rate = 1.0
+train_rate = 0.2
+# update_rate=1.0
+update_rate = 0.5
+# preprocessing = "Titanic"
+preprocessing = None
+# label = "Survived"
+label = None
+# feat = ["Age", "Embarked"]
+feat = None
+# CSVpath = "data/titanic/train.csv"
+CSVpath = None
 
 if __name__ == "__main__":
     st = time.time()
     print("Start training")
     print("Q = ", Q, ", L = ", L, ", W = ", W, ", N = ", N, ", M = ", M, ", U = ", U)
-    print("update = ", update, ", trainrate = ", trainrate)
+    print(
+        "update = ",
+        update,
+        ", train_rate = ",
+        train_rate,
+        ", update_rate = ",
+        update_rate,
+    )
     parallel_train(
         Q,
         L,
@@ -57,10 +68,11 @@ if __name__ == "__main__":
         CSVpath=CSVpath,
         preprocessing=preprocessing,
         update=update,
-        trainrate=trainrate,
+        train_rate=train_rate,
+        update_rate=update_rate,
         isVal=True,
         isEval=True,
         label=label,
         feat=feat,
     )
-    print("Implementation time : ", time.time() - st)
+    print("All training finished. Implementation time : ", time.time() - st)
